@@ -23,26 +23,42 @@ let isConnected = false;
 let persistentUserId = null;
 let userIdConfirmed = false;
 let confirmedAnonymousId = null;
+let selectedUserId = null;
+let unreadPrivateMessages = {};
 
 // Armazenar todas as mensagens recebidas
 let allMessages = [];
 let allActiveUsers = [];
 
-// Função para decidir se a mensagem deve ser exibida
 function shouldShowMessage(message) {
-  if (showBotMessages) return true;
-  return message.type !== 'system';
+  // Se estiver em chat privado
+  if (selectedUserId) {
+    // Só mostra mensagens privadas entre mim e o usuário selecionado
+    return (
+      (message.toAnonymousId === confirmedAnonymousId && message.anonymousId === selectedUserId) ||
+      (message.anonymousId === confirmedAnonymousId && message.toAnonymousId === selectedUserId)
+    );
+  } else {
+    // Modo geral: só mostra mensagens públicas
+    if (showBotMessages) return true;
+    return message.type !== 'system' && !message.toAnonymousId;
+  }
 }
 
 // Função para buscar e exibir usuários ativos
 async function fetchAndDisplayActiveUsers() {
+  const loading = document.getElementById('active-users-loading');
+  if (loading) loading.style.display = 'flex';
   try {
     const res = await fetch('/api/active-users');
     const users = await res.json();
-    allActiveUsers = users;
+    // Remover o próprio usuário da lista
+    allActiveUsers = users.filter(user => user.anonymousId !== confirmedAnonymousId);
     renderActiveUsersList();
   } catch (err) {
     // Silenciar erro
+  } finally {
+    if (loading) loading.style.display = 'none';
   }
 }
 
@@ -59,8 +75,29 @@ function renderActiveUsersList() {
   filtered.forEach(user => {
     const li = document.createElement('li');
     li.textContent = user.anonymousId || user.id;
+    li.title = user.anonymousId || user.id;
+    li.style.fontWeight = (selectedUserId === (user.anonymousId || user.id)) ? 'bold' : 'normal';
+    li.addEventListener('click', () => {
+      selectedUserId = user.anonymousId || user.id;
+      unreadPrivateMessages[selectedUserId] = 0;
+      renderActiveUsersList();
+      setChatTitle(selectedUserId);
+      reloadMessages();
+    });
+    // Badge de notificação
+    if (unreadPrivateMessages[user.anonymousId || user.id] > 0) {
+      const badge = document.createElement('span');
+      badge.className = 'active-user-badge';
+      badge.textContent = unreadPrivateMessages[user.anonymousId || user.id];
+      li.appendChild(badge);
+    }
     list.appendChild(li);
   });
+}
+
+function setChatTitle(title) {
+  const chatTitle = document.querySelector('.chat-title');
+  if (chatTitle) chatTitle.textContent = title ? title : 'Conversas Gerais';
 }
 
 // Inicialização
@@ -129,6 +166,24 @@ document.addEventListener('DOMContentLoaded', async () => {
   const search = document.getElementById('active-users-search');
   if (search) {
     search.addEventListener('input', renderActiveUsersList);
+  }
+
+  // Ao clicar fora da lista, volta para modo público
+  const mainChatContent = document.querySelector('.main-chat-content');
+  if (mainChatContent) {
+    mainChatContent.addEventListener('click', (e) => {
+      // Só volta para o modo geral se o clique não for em um elemento interativo do chat (input, botão, etc)
+      if (selectedUserId) {
+        // Verifica se o clique foi realmente fora da barra lateral e não em um input/botão
+        const isInputOrButton = e.target.closest('.input-area') || e.target.closest('.dropdown-container');
+        if (!isInputOrButton) {
+          selectedUserId = null;
+          setChatTitle('Conversas Gerais');
+          reloadMessages();
+          renderActiveUsersList();
+        }
+      }
+    });
   }
 });
 
@@ -309,7 +364,11 @@ function sendMessage() {
     const text = messageInput.value.trim();
     if (!text || !isConnected) return;
     
-    socket.emit('sendMessage', { text });
+    const data = { text };
+    if (selectedUserId) {
+      data.toAnonymousId = selectedUserId;
+    }
+    socket.emit('sendMessage', data);
     messageInput.value = '';
     updateCharCount();
     handleTyping();
@@ -317,16 +376,27 @@ function sendMessage() {
 
 function addMessage(message) {
   allMessages.push(message);
-  if (shouldShowMessage(message)) {
-    // Remover mensagem de boas-vindas se existir
-    const welcomeMessage = messagesArea.querySelector('.welcome-message');
-    if (welcomeMessage) {
-        welcomeMessage.remove();
+  // Mensagem privada recebida para mim
+  if (message.toAnonymousId && message.toAnonymousId === confirmedAnonymousId && message.anonymousId !== confirmedAnonymousId) {
+    if (selectedUserId !== message.anonymousId) {
+      unreadPrivateMessages[message.anonymousId] = (unreadPrivateMessages[message.anonymousId] || 0) + 1;
+      renderActiveUsersList();
     }
-    
-    const messageElement = createMessageElement(message);
-    messagesArea.appendChild(messageElement);
-    scrollToBottom();
+  }
+  // Mensagem privada enviada por mim
+  if (message.toAnonymousId && message.anonymousId === confirmedAnonymousId && message.toAnonymousId !== confirmedAnonymousId) {
+    if (selectedUserId !== message.toAnonymousId) {
+      unreadPrivateMessages[message.toAnonymousId] = (unreadPrivateMessages[message.toAnonymousId] || 0) + 1;
+      renderActiveUsersList();
+    }
+  }
+  if (shouldShowMessage(message)) {
+    // Só mostra mensagem se for pública, ou se for privada e for para mim ou enviada por mim
+    if (!message.toAnonymousId || message.toAnonymousId === confirmedAnonymousId || message.anonymousId === confirmedAnonymousId) {
+      const messageElement = createMessageElement(message);
+      messagesArea.appendChild(messageElement);
+      scrollToBottom();
+    }
   }
 }
 
@@ -493,15 +563,12 @@ function savePersistentUserId(userId) {
 
 function loadPersistentUserId() {
   let userId = null;
-  
   // 1. Tentar localStorage primeiro
   try {
     userId = localStorage.getItem('chat_anonymous_user_id');
-    if (userId && userId.startsWith('Anônimo_')) {
+    if (userId && /^[A-Za-zÀ-ÿ]+[A-Za-zÀ-ÿ]+#\d{3,4}$/.test(userId)) {
       const timestamp = localStorage.getItem('chat_anonymous_timestamp');
       const age = Date.now() - parseInt(timestamp || '0');
-      
-      // Verificar se não é muito antigo (mais de 1 ano)
       if (age < 365 * 24 * 60 * 60 * 1000) {
         persistentUserId = userId;
         console.log('ID carregado do localStorage:', userId);
@@ -515,11 +582,10 @@ function loadPersistentUserId() {
   } catch (error) {
     console.warn('Erro ao carregar do localStorage:', error);
   }
-  
   // 2. Tentar sessionStorage
   try {
     userId = sessionStorage.getItem('chat_anonymous_user_id');
-    if (userId && userId.startsWith('Anônimo_')) {
+    if (userId && /^[A-Za-zÀ-ÿ]+[A-Za-zÀ-ÿ]+#\d{3,4}$/.test(userId)) {
       persistentUserId = userId;
       console.log('ID carregado do sessionStorage:', userId);
       return;
@@ -527,13 +593,12 @@ function loadPersistentUserId() {
   } catch (error) {
     console.warn('Erro ao carregar do sessionStorage:', error);
   }
-  
   // 3. Tentar cookies
   try {
     const cookies = document.cookie.split(';');
     for (let cookie of cookies) {
       const [name, value] = cookie.trim().split('=');
-      if (name === 'chat_anonymous_user_id' && value && value.startsWith('Anônimo_')) {
+      if (name === 'chat_anonymous_user_id' && value && /^[A-Za-zÀ-ÿ]+[A-Za-zÀ-ÿ]+#\d{3,4}$/.test(value)) {
         persistentUserId = value;
         console.log('ID carregado dos cookies:', value);
         return;
@@ -542,15 +607,12 @@ function loadPersistentUserId() {
   } catch (error) {
     console.warn('Erro ao carregar dos cookies:', error);
   }
-  
   // 4. Tentar IndexedDB (assíncrono)
   loadFromIndexedDB().then(id => {
-    if (id && id.startsWith('Anônimo_')) {
+    if (id && /^[A-Za-zÀ-ÿ]+[A-Za-zÀ-ÿ]+#\d{3,4}$/.test(id)) {
       persistentUserId = id;
       console.log('ID carregado do IndexedDB:', id);
-      // Exibir ID se encontrado no IndexedDB
       displayUserId(id);
-      // Habilitar input se encontrou ID no IndexedDB
       enableInput();
     } else {
       console.log('Nenhum ID persistido encontrado, será gerado novo');
@@ -559,16 +621,24 @@ function loadPersistentUserId() {
     console.warn('Erro ao carregar do IndexedDB:', error);
     console.log('Nenhum ID persistido encontrado, será gerado novo');
   });
-  
-  // Se não encontrou nada nos métodos síncronos
   if (!persistentUserId) {
     console.log('Nenhum ID persistido encontrado nos métodos síncronos');
   } else {
-    // Exibir ID se encontrado nos métodos síncronos
     displayUserId(persistentUserId);
-    // Habilitar input se encontrou ID nos métodos síncronos
     enableInput();
   }
+}
+
+// Ao receber userIdConfirmed do backend, sempre salvar no localStorage
+if (typeof socket !== 'undefined') {
+  socket.on('userIdConfirmed', (data) => {
+    if (data.anonymousId && /^[A-Za-zÀ-ÿ]+[A-Za-zÀ-ÿ]+#\d{3,4}$/.test(data.anonymousId)) {
+      savePersistentUserId(data.anonymousId);
+      confirmedAnonymousId = data.anonymousId;
+      displayUserId(data.anonymousId);
+      enableInput();
+    }
+  });
 }
 
 function saveToIndexedDB(userId) {

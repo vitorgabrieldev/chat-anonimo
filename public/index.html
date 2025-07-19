@@ -16,6 +16,9 @@
             <aside id="active-users-container" class="active-users-container">
                 <h3>Usuários Ativos</h3>
                 <input type="text" id="active-users-search" class="active-users-search" placeholder="Buscar usuário..." autocomplete="off" style="width: 100%; margin-bottom: 0.7rem; border-radius: 6px; border: 1px solid #444; background: #232323; color: #e0e0e0; padding: 6px 10px; font-size: 0.98rem; outline: none;" />
+                <div id="active-users-loading" class="active-users-loading" style="display:none; justify-content:center; align-items:center; margin-bottom:0.7rem; height:28px;">
+                  <div class="spinner"></div>
+                </div>
                 <ul id="active-users-list"></ul>
             </aside>
             <div class="main-chat-content">
@@ -55,6 +58,9 @@
 
         <!-- Chat Container -->
         <div class="chat-container">
+            <div class="chat-title-bar">
+                <h2 class="chat-title">Conversas Gerais</h2>
+            </div>
             <!-- Messages Area -->
             <div class="messages-area" id="messages-area">
                 <div class="welcome-message">

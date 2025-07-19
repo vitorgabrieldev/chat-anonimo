@@ -12,7 +12,8 @@ const {
   removeUser, 
   getStats,
   cleanupOldMessages,
-  getActiveUsers // importar função
+  getActiveUsers, // importar função
+  User // importar modelo
 } = require('./database');
 
 const app = express();
@@ -31,6 +32,36 @@ app.use(express.static(path.join(__dirname, '../public')));
 
 // Armazenamento em memória para usuários ativos (apenas para sessões)
 const activeUsers = new Map();
+// Map de anonymousId para socketId
+const anonymousIdToSocketId = new Map();
+
+// Listas ampliadas de adjetivos e animais para nomes fictícios
+const ADJECTIVES = [
+  'Feliz', 'Sábio', 'Rápido', 'Doce', 'Bravo', 'Calmo', 'Astuto', 'Leal', 'Misterioso', 'Radiante', 'Sereno', 'Ágil', 'Forte', 'Gentil', 'Veloz', 'Esperto', 'Valente', 'Sonhador', 'Criativo', 'Curioso',
+  'Alegre', 'Brilhante', 'Cauteloso', 'Dedicado', 'Elegante', 'Feroz', 'Gracioso', 'Honesto', 'Imparável', 'Jovial', 'Leve', 'Magnífico', 'Nobre', 'Orgulhoso', 'Paciente', 'Quieto', 'Risonho', 'Sutil', 'Tranquilo', 'Único',
+  'Vibrante', 'Xereta', 'Zeloso', 'Amável', 'Bondoso', 'Corajoso', 'Determinado', 'Eficiente', 'Fiel', 'Generoso', 'Habilidoso', 'Inventivo', 'Justo', 'Leal', 'Motivado', 'Natural', 'Observador', 'Persistente', 'Querido', 'Resiliente',
+  'Sincero', 'Talentoso', 'Útil', 'Vencedor', 'Xodó', 'Zelador', 'Animado', 'Bacana', 'Cativante', 'Divertido', 'Empolgado', 'Fascinante', 'Guerreiro', 'Harmonioso', 'Iluminado', 'Jubiloso', 'Luminoso', 'Mágico', 'Notável', 'Orgulhoso'
+];
+const ANIMALS = [
+  'Tigre', 'Lobo', 'Coruja', 'Leão', 'Raposa', 'Urso', 'Gato', 'Cervo', 'Panda', 'Águia', 'Tartaruga', 'Coelho', 'Cavalo', 'Macaco', 'Falcão', 'Baleia', 'Tucano', 'Pinguim', 'Canguru', 'Elefante',
+  'Girafa', 'Hipopótamo', 'Iguana', 'Jacaré', 'Kiwi', 'Lagarto', 'Morcego', 'Naja', 'Ovelha', 'Porco', 'Quati', 'Rinoceronte', 'Sapo', 'Tamanduá', 'Urubu', 'Vaca', 'Xaxim', 'Zebra', 'Anta', 'BichoPreguiça',
+  'Camelo', 'Dromedário', 'Escorpião', 'Flamingo', 'Gambá', 'Hiena', 'Javali', 'Lagosta', 'Mico', 'Narval', 'Ornitorrinco', 'Pato', 'Quokka', 'Rena', 'Suricato', 'Tatu', 'UrsoPolar', 'Vespa', 'Xaréu', 'Zangão',
+  'Alce', 'BichoPau', 'Cobra', 'Doninha', 'Enguia', 'Foca', 'Galo', 'Harpia', 'Inseto', 'Jabuti', 'Libélula', 'Marreco', 'Nandu', 'Ouriço', 'Pavão', 'QueroQuero', 'Rato', 'Siri', 'Tritão', 'Uirapuru'
+];
+function generateFakeName() {
+  let name;
+  let tries = 0;
+  do {
+    const adj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
+    const animal = ANIMALS[Math.floor(Math.random() * ANIMALS.length)];
+    const number = Math.floor(100 + Math.random() * 9000); // 3-4 dígitos
+    name = `${adj}${animal}#${number}`;
+    tries++;
+    // Evita loop infinito
+    if (tries > 20) break;
+  } while ([...activeUsers.values()].some(u => u.anonymousId === name));
+  return name;
+}
 
 // Rota principal
 app.get('/', (req, res) => {
@@ -69,15 +100,35 @@ io.on('connection', async (socket) => {
     let anonymousId;
     
         try {
-      if (data.persistentId && /^\d{8,}$/.test(data.persistentId)) {
-        // Usar ID persistente se válido (apenas números)
-        anonymousId = data.persistentId;
-        console.log('Usando ID persistente:', anonymousId);
+      // Função para garantir nome único no banco
+      async function getUniqueFakeName() {
+        let name;
+        let tries = 0;
+        do {
+          name = generateFakeName();
+          tries++;
+          const exists = await User.findOne({ where: { anonymousId: name } });
+          if (!exists) break;
+        } while (tries < 30);
+        return name;
+      }
+      // Verifica se o ID enviado é válido e único
+      if (data.persistentId && /^[A-Za-zÀ-ÿ]+[A-Za-zÀ-ÿ]+#\d{3,4}$/.test(data.persistentId)) {
+        const exists = await User.findOne({ where: { anonymousId: data.persistentId } });
+        if (!exists) {
+          anonymousId = data.persistentId;
+          console.log('Usando ID persistente:', anonymousId);
+        } else {
+          // Já existe, gerar novo
+          anonymousId = await getUniqueFakeName();
+          console.log('ID persistente já existe, gerando novo:', anonymousId);
+          socket.emit('userIdConfirmed', { anonymousId });
+        }
       } else {
-        // Gerar novo ID anônimo numérico
-        const uniqueId = Math.floor(10000000 + Math.random() * 90000000).toString(); // 8 dígitos
-        anonymousId = uniqueId;
+        // Gerar novo nome fictício único
+        anonymousId = await getUniqueFakeName();
         console.log('Gerando novo ID:', anonymousId);
+        socket.emit('userIdConfirmed', { anonymousId });
       }
       
       const userData = {
@@ -95,8 +146,11 @@ io.on('connection', async (socket) => {
       }
       
       // Enviar confirmação do ID para o cliente
-      socket.emit('userIdConfirmed', { anonymousId });
+      // socket.emit('userIdConfirmed', { anonymousId }); // Moved up
       
+      // Mapear anonymousId para socketId
+      anonymousIdToSocketId.set(anonymousId, socket.id);
+
       // Aguardar um pequeno delay para garantir que o cliente processou o ID
       setTimeout(async () => {
         // Enviar mensagem de boas-vindas
@@ -130,10 +184,8 @@ io.on('connection', async (socket) => {
     } catch (error) {
       console.error('Erro ao processar ID persistente:', error);
       
-      // Fallback: gerar ID simples
-      const uniqueId = Math.floor(10000000 + Math.random() * 90000000).toString();
-      const fallbackId = uniqueId;
-      
+      // Fallback: gerar nome fictício simples
+      const fallbackId = generateFakeName();
       socket.emit('userIdConfirmed', { anonymousId: fallbackId });
       console.log('Usando ID de fallback:', fallbackId);
     }
@@ -150,13 +202,24 @@ io.on('connection', async (socket) => {
       type: 'user',
       timestamp: new Date().toISOString(),
       userId: socket.id,
-      anonymousId: user.anonymousId
+      anonymousId: user.anonymousId,
+      toAnonymousId: data.toAnonymousId || null
     };
     
     // Salvar mensagem no banco
     try {
       await saveMessage(message);
-      io.emit('message', message);
+      if (data.toAnonymousId) {
+        // Mensagem privada
+        const destSocketId = anonymousIdToSocketId.get(data.toAnonymousId);
+        if (destSocketId) {
+          io.to(destSocketId).emit('message', message); // Para o destinatário
+        }
+        socket.emit('message', message); // Para o remetente
+      } else {
+        // Mensagem pública
+        io.emit('message', message);
+      }
     } catch (error) {
       console.error('Erro ao salvar mensagem:', error);
       socket.emit('error', { message: 'Erro ao enviar mensagem' });
@@ -204,6 +267,11 @@ io.on('connection', async (socket) => {
       }
     }
     
+    // Remover do map anonymousIdToSocketId
+    if (user && user.anonymousId) {
+      anonymousIdToSocketId.delete(user.anonymousId);
+    }
+
     console.log('Usuário desconectado:', socket.id);
   });
 });

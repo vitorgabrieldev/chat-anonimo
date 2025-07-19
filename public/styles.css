@@ -30,8 +30,9 @@ body {
     margin: 1rem;
     border-radius: 16px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-    overflow: hidden;
     border: 1px solid rgba(255, 255, 255, 0.1);
+    position: relative;
+    z-index: 1001;
 }
 
 .header-content {
@@ -147,8 +148,9 @@ body {
     margin: 1rem;
     border-radius: 16px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-    overflow: hidden;
     border: 1px solid rgba(255, 255, 255, 0.1);
+    position: relative;
+    z-index: 1;
 }
 
 /* Messages Area */
@@ -493,4 +495,125 @@ body {
     .welcome-message i {
         font-size: 2rem;
     }
+} 
+
+/* Switch moderno para mostrar/ocultar mensagens do sistema */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 22px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #444;
+  transition: 0.3s;
+  border-radius: 22px;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 16px;
+  width: 16px;
+  left: 3px;
+  bottom: 3px;
+  background: #fff;
+  transition: 0.3s;
+  border-radius: 50%;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+
+input:checked + .slider {
+  background: #2d5a2d;
+}
+
+input:checked + .slider:before {
+  transform: translateX(18px);
+}
+
+.slider.round {
+  border-radius: 22px;
+}
+
+/* Ajuste para alinhar melhor o switch com o texto */
+.show-bot-messages-switch {
+  align-items: center;
+  gap: 0.5rem;
+} 
+
+/* Corrigir containers para não cortar o dropdown */
+.header, .header-content, .user-info {
+  overflow: visible !important;
+}
+
+/* Dropdown de opções */
+.dropdown-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  z-index: 2001;
+}
+
+.dropdown-toggle {
+  background: none;
+  border: none;
+  color: #e0e0e0;
+  font-size: 1.2rem;
+  margin-left: 1rem;
+  cursor: pointer;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+.dropdown-toggle:hover, .dropdown-toggle:focus {
+  background: #333;
+  border-radius: 50%;
+}
+
+.dropdown-menu {
+  display: none;
+  position: absolute;
+  top: 120%;
+  right: 0;
+  min-width: 220px;
+  background: #232323;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+  z-index: 3000 !important;
+  padding: 0.5rem 0;
+  animation: fadeIn 0.2s;
+}
+
+.dropdown-menu.active {
+  display: block;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Ajuste para o switch dentro do dropdown */
+.show-bot-messages-switch {
+  width: 100%;
+  justify-content: space-between;
+  padding: 0.5rem 1rem;
 } 

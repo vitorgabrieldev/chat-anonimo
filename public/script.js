@@ -9,6 +9,12 @@ const typingIndicator = document.getElementById('typing-indicator');
 const typingText = document.getElementById('typing-text');
 const userIdDisplay = document.getElementById('user-id-display');
 const copyUserIdButton = document.getElementById('copy-user-id');
+const showBotMessagesSwitch = document.getElementById('show-bot-messages');
+let showBotMessages = true;
+
+// Dropdown de opções
+const dropdownToggle = document.getElementById('dropdown-toggle');
+const dropdownMenu = document.getElementById('dropdown-menu');
 
 // Variáveis globais
 let socket;
@@ -17,6 +23,15 @@ let isConnected = false;
 let persistentUserId = null;
 let userIdConfirmed = false;
 let confirmedAnonymousId = null;
+
+// Armazenar todas as mensagens recebidas
+let allMessages = [];
+
+// Função para decidir se a mensagem deve ser exibida
+function shouldShowMessage(message) {
+  if (showBotMessages) return true;
+  return message.type !== 'system';
+}
 
 // Inicialização
 document.addEventListener('DOMContentLoaded', async () => {
@@ -42,6 +57,38 @@ document.addEventListener('DOMContentLoaded', async () => {
   } else {
     // Se não temos ID persistente, aguardar conexão
     console.log('Nenhum ID persistente encontrado, aguardando conexão...');
+  }
+
+  // Carregar preferência do usuário do localStorage
+  if (localStorage.getItem('showBotMessages') !== null) {
+    showBotMessages = localStorage.getItem('showBotMessages') === 'true';
+    if (showBotMessagesSwitch) showBotMessagesSwitch.checked = showBotMessages;
+  }
+
+  if (showBotMessagesSwitch) {
+    showBotMessagesSwitch.addEventListener('change', () => {
+      showBotMessages = showBotMessagesSwitch.checked;
+      localStorage.setItem('showBotMessages', showBotMessages);
+      // Recarregar as mensagens exibidas
+      reloadMessages();
+    });
+  }
+
+  // Dropdown de opções
+  if (dropdownToggle && dropdownMenu) {
+    dropdownToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dropdownMenu.classList.toggle('active');
+    });
+
+    // Fechar dropdown ao clicar fora
+    document.addEventListener('click', (e) => {
+      if (dropdownMenu.classList.contains('active')) {
+        if (!dropdownMenu.contains(e.target) && e.target !== dropdownToggle) {
+          dropdownMenu.classList.remove('active');
+        }
+      }
+    });
   }
 });
 
@@ -229,6 +276,8 @@ function sendMessage() {
 }
 
 function addMessage(message) {
+  allMessages.push(message);
+  if (shouldShowMessage(message)) {
     // Remover mensagem de boas-vindas se existir
     const welcomeMessage = messagesArea.querySelector('.welcome-message');
     if (welcomeMessage) {
@@ -238,6 +287,7 @@ function addMessage(message) {
     const messageElement = createMessageElement(message);
     messagesArea.appendChild(messageElement);
     scrollToBottom();
+  }
 }
 
 function createMessageElement(message) {
@@ -286,13 +336,15 @@ function getMessageClass(message) {
 }
 
 function loadMessageHistory(messages) {
-  // Limpar área de mensagens
+  allMessages = messages;
   messagesArea.innerHTML = '';
-  
-  // Adicionar mensagens do histórico
-  messages.forEach(message => {
-    addMessage(message);
+  allMessages.forEach(msg => {
+    if (shouldShowMessage(msg)) {
+      const messageElement = createMessageElement(msg);
+      messagesArea.appendChild(messageElement);
+    }
   });
+  scrollToBottom();
 }
 
 // Funções de interface
@@ -780,3 +832,15 @@ messageInput.addEventListener('input', () => {
     const hasText = messageInput.value.trim().length > 0;
     sendButton.disabled = !hasText || !isConnected;
 }); 
+
+// Função para recarregar as mensagens exibidas ao alternar o switch
+function reloadMessages() {
+  messagesArea.innerHTML = '';
+  allMessages.forEach(msg => {
+    if (shouldShowMessage(msg)) {
+      const messageElement = createMessageElement(msg);
+      messagesArea.appendChild(messageElement);
+    }
+  });
+  scrollToBottom();
+} 

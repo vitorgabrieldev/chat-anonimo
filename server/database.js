@@ -123,16 +123,28 @@ async function getRecentMessages(limit = 100) {
 // Função para salvar/atualizar usuário
 async function saveUser(userData) {
   try {
+    // Se vier senha, gerar hash
+    let passwordHash = undefined;
+    if (userData.password) {
+      // Gera hash com salt 10
+      passwordHash = await bcrypt.hash(userData.password, 10);
+    }
+
     const [user, created] = await User.findOrCreate({
       where: { id: userData.id },
-      defaults: userData
+      defaults: {
+        ...userData,
+        password: passwordHash || undefined
+      }
     });
-    
+
     if (!created) {
-      // Atualizar lastSeen se usuário já existe
-      await user.update({ lastSeen: new Date() });
+      // Atualizar lastSeen e senha se fornecida
+      const updateData = { lastSeen: new Date() };
+      if (passwordHash) updateData.password = passwordHash;
+      await user.update(updateData);
     }
-    
+
     return user;
   } catch (error) {
     console.error('Erro ao salvar usuário:', error);
@@ -197,6 +209,17 @@ async function getStats() {
   }
 }
 
+// Função para buscar todos os usuários ativos (todos os registros da tabela User)
+async function getActiveUsers() {
+  try {
+    const users = await User.findAll();
+    return users;
+  } catch (error) {
+    console.error('Erro ao buscar usuários ativos:', error);
+    return [];
+  }
+}
+
 module.exports = {
   sequelize,
   Message,
@@ -207,5 +230,6 @@ module.exports = {
   saveUser,
   removeUser,
   cleanupOldMessages,
-  getStats
+  getStats,
+  getActiveUsers // exporta nova função
 }; 

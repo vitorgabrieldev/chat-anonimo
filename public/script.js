@@ -10,7 +10,7 @@ const typingText = document.getElementById('typing-text');
 const userIdDisplay = document.getElementById('user-id-display');
 const copyUserIdButton = document.getElementById('copy-user-id');
 const showBotMessagesSwitch = document.getElementById('show-bot-messages');
-let showBotMessages = true;
+let showBotMessages = false; // Padrão agora é desativado
 
 // Dropdown de opções
 const dropdownToggle = document.getElementById('dropdown-toggle');
@@ -26,11 +26,41 @@ let confirmedAnonymousId = null;
 
 // Armazenar todas as mensagens recebidas
 let allMessages = [];
+let allActiveUsers = [];
 
 // Função para decidir se a mensagem deve ser exibida
 function shouldShowMessage(message) {
   if (showBotMessages) return true;
   return message.type !== 'system';
+}
+
+// Função para buscar e exibir usuários ativos
+async function fetchAndDisplayActiveUsers() {
+  try {
+    const res = await fetch('/api/active-users');
+    const users = await res.json();
+    allActiveUsers = users;
+    renderActiveUsersList();
+  } catch (err) {
+    // Silenciar erro
+  }
+}
+
+function renderActiveUsersList() {
+  const list = document.getElementById('active-users-list');
+  const search = document.getElementById('active-users-search');
+  if (!list) return;
+  let filtered = allActiveUsers;
+  if (search && search.value.trim() !== '') {
+    const q = search.value.trim().toLowerCase();
+    filtered = allActiveUsers.filter(user => (user.anonymousId || user.id).toLowerCase().includes(q));
+  }
+  list.innerHTML = '';
+  filtered.forEach(user => {
+    const li = document.createElement('li');
+    li.textContent = user.anonymousId || user.id;
+    list.appendChild(li);
+  });
 }
 
 // Inicialização
@@ -63,6 +93,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (localStorage.getItem('showBotMessages') !== null) {
     showBotMessages = localStorage.getItem('showBotMessages') === 'true';
     if (showBotMessagesSwitch) showBotMessagesSwitch.checked = showBotMessages;
+  } else {
+    if (showBotMessagesSwitch) showBotMessagesSwitch.checked = false;
   }
 
   if (showBotMessagesSwitch) {
@@ -89,6 +121,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
       }
     });
+  }
+
+  // Removido: lógica de senha/user-password
+  fetchAndDisplayActiveUsers();
+  setInterval(fetchAndDisplayActiveUsers, 10000); // Atualiza a cada 10s
+  const search = document.getElementById('active-users-search');
+  if (search) {
+    search.addEventListener('input', renderActiveUsersList);
   }
 });
 

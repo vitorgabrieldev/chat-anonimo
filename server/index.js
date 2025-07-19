@@ -11,7 +11,8 @@ const {
   saveUser, 
   removeUser, 
   getStats,
-  cleanupOldMessages 
+  cleanupOldMessages,
+  getActiveUsers // importar função
 } = require('./database');
 
 const app = express();
@@ -47,6 +48,16 @@ app.get('/api/messages', async (req, res) => {
   }
 });
 
+// Rota para obter usuários ativos
+app.get('/api/active-users', async (req, res) => {
+  try {
+    const users = await getActiveUsers();
+    res.json(users);
+  } catch (error) {
+    console.error('Erro ao buscar usuários ativos:', error);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
 
 
 // Socket.io events
@@ -58,14 +69,14 @@ io.on('connection', async (socket) => {
     let anonymousId;
     
         try {
-      if (data.persistentId && data.persistentId.startsWith('Anônimo_')) {
-        // Usar ID persistente se válido
+      if (data.persistentId && /^\d{8,}$/.test(data.persistentId)) {
+        // Usar ID persistente se válido (apenas números)
         anonymousId = data.persistentId;
         console.log('Usando ID persistente:', anonymousId);
       } else {
-        // Gerar novo ID anônimo único
-        const uniqueId = uuidv4().replace(/-/g, '').substring(0, 12);
-        anonymousId = `Anônimo_${uniqueId}`;
+        // Gerar novo ID anônimo numérico
+        const uniqueId = Math.floor(10000000 + Math.random() * 90000000).toString(); // 8 dígitos
+        anonymousId = uniqueId;
         console.log('Gerando novo ID:', anonymousId);
       }
       
@@ -120,8 +131,8 @@ io.on('connection', async (socket) => {
       console.error('Erro ao processar ID persistente:', error);
       
       // Fallback: gerar ID simples
-      const uniqueId = uuidv4().replace(/-/g, '').substring(0, 12);
-      const fallbackId = `Anônimo_${uniqueId}`;
+      const uniqueId = Math.floor(10000000 + Math.random() * 90000000).toString();
+      const fallbackId = uniqueId;
       
       socket.emit('userIdConfirmed', { anonymousId: fallbackId });
       console.log('Usando ID de fallback:', fallbackId);

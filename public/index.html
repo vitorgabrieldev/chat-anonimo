@@ -11,6 +11,14 @@
 </head>
 <body>
     <div class="container">
+        <div class="active-users-layout">
+            <!-- Lista de usuários ativos -->
+            <aside id="active-users-container" class="active-users-container">
+                <h3>Usuários Ativos</h3>
+                <input type="text" id="active-users-search" class="active-users-search" placeholder="Buscar usuário..." autocomplete="off" style="width: 100%; margin-bottom: 0.7rem; border-radius: 6px; border: 1px solid #444; background: #232323; color: #e0e0e0; padding: 6px 10px; font-size: 0.98rem; outline: none;" />
+                <ul id="active-users-list"></ul>
+            </aside>
+            <div class="main-chat-content">
         <!-- Header -->
         <header class="header">
             <div class="header-content">
@@ -35,7 +43,7 @@
                             <div class="show-bot-messages-switch" style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem;">
                                 <label for="show-bot-messages" style="font-size: 0.95rem; cursor: pointer;">Ver mensagens do sistema</label>
                                 <label class="switch">
-                                    <input type="checkbox" id="show-bot-messages" checked>
+                                    <input type="checkbox" id="show-bot-messages" >
                                     <span class="slider round"></span>
                                 </label>
                             </div>
@@ -85,6 +93,7 @@
                 </div>
             </div>
         </div>
+    </div>
     </div>
 
     <!-- Socket.io Client -->
